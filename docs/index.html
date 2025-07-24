@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crypto Airdrop Tracker | Real-Time Updates</title>
+    <meta name="description" content="Track legitimate cryptocurrency airdrops with automatic updates every 4 hours">
+    
+    <!-- Preload critical resources -->
+    <link rel="preload" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" as="style">
+    <link rel="preload" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" as="style">
+    <link rel="preload" href="/assets/data.json" as="fetch" crossorigin="anonymous">
+    
+    <!-- CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/manifest.webmanifest">
+    
+    <style>
+        :root {
+            --primary-color: #6610f2;
+            --secondary-color: #6c757d;
+            --dark-color: #212529;
+            --light-color: #f8f9fa;
+            --success-color: #198754;
+            --danger-color: #dc3545;
+            --warning-color: #ffc107;
+        }
+        
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background-color: #f5f7fa;
+            color: var(--dark-color);
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+        
+        .navbar-brand {
+            font-weight: 700;
+            letter-spacing: 0.5px;
+        }
+        
+        .airdrop-card {
+            transition: all 0.3s ease;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            border: none;
+        }
+        
+        .airdrop-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+        }
+        
+        .airdrop-card .card-body {
+            padding: 1.5rem;
+        }
+        
+        .badge-expiring {
+            background-color: var(--danger-color);
+            font-weight: 500;
+        }
+        
+        .badge-new {
+            background-color: var(--success-color);
+        }
+        
+        .source-badge {
+            background-color: var(--secondary-color);
+            color: white;
+        }
+        
+        #loadingIndicator {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 300px;
+        }
+        
+        .spinner {
+            width: 3rem;
+            height: 3rem;
+        }
+        
+        .last-updated {
+            font-size: 0.85rem;
+            color: var(--secondary-color);
+        }
+        
+        footer {
+            background-color: var(--dark-color);
+            color: white;
+            margin-top: auto;
+        }
+        
+        .filter-controls {
+            background: white;
+            border-radius: 10px;
+            padding: 1rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            margin-bottom: 2rem;
+        }
+        
+        @media (max-width: 768px) {
+            .airdrop-card {
+                margin-bottom: 1.5rem;
+            }
+            
+            .filter-controls {
+                padding: 0.75rem;
+            }
+        }
+        
+        /* Dark mode support */
+        @media (prefers-color-scheme: dark) {
+            body {
+                background-color: #121212;
+                color: #e0e0e0;
+            }
+            
+            .airdrop-card {
+                background-color: #1e1e1e;
+                color: #e0e0e0;
+            }
+            
+            .filter-controls {
+                background-color: #1e1e1e;
+            }
+            
+            .text-dark {
+                color: #e0e0e0 !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <i class="bi bi-coin me-2"></i>Crypto Airdrop Tracker
+            </a>
+            <div class="d-flex align-items-center">
+                <span id="lastUpdated" class="last-updated me-3"></span>
+                <button class="btn btn-sm btn-outline-light" id="refreshBtn">
+                    <i class="bi bi-arrow-clockwise"></i>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="container my-4">
+        <div class="row">
+            <div class="col-12">
+                <div class="filter-controls">
+                    <div class="row g-3 align-items-center">
+                        <div class="col-md-4">
+                            <label for="sourceFilter" class="form-label">Source</label>
+                            <select id="sourceFilter" class="form-select">
+                                <option value="">All Sources</option>
+                                <!-- Dynamically populated -->
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="searchInput" class="form-label">Search</label>
+                            <div class="input-group">
+                                <input type="text" id="searchInput" class="form-control" placeholder="Search airdrops...">
+                                <button class="btn btn-outline-secondary" type="button" id="searchBtn">
+                                    <i class="bi bi-search"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="sortSelect" class="form-label">Sort By</label>
+                            <select id="sortSelect" class="form-select">
+                                <option value="newest">Newest First</option>
+                                <option value="oldest">Oldest First</option>
+                                <option value="name">A-Z</option>
+                                <option value="name-desc">Z-A</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Stats Bar -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body p-3">
+                        <div class="d-flex flex-wrap justify-content-between align-items-center">
+                            <div class="stat-item text-center px-3">
+                                <h6 class="mb-0 text-muted">Total Airdrops</h6>
+                                <h3 class="mb-0" id="totalCount">0</h3>
+                            </div>
+                            <div class="stat-item text-center px-3">
+                                <h6 class="mb-0 text-muted">Active</h6>
+                                <h3 class="mb-0" id="activeCount">0</h3>
+                            </div>
+                            <div class="stat-item text-center px-3">
+                                <h6 class="mb-0 text-muted">New Today</h6>
+                                <h3 class="mb-0" id="newCount">0</h3>
+                            </div>
+                            <div class="stat-item text-center px-3">
+                                <h6 class="mb-0 text-muted">Expiring Soon</h6>
+                                <h3 class="mb-0" id="expiringCount">0</h3>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading Indicator -->
+        <div id="loadingIndicator">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-3">Loading airdrops...</p>
+        </div>
+
+        <!-- Airdrops Container -->
+        <div class="row" id="airdropContainer">
+            <!-- Dynamically populated -->
+        </div>
+
+        <!-- Empty State -->
+        <div class="row d-none" id="emptyState">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body text-center py-5">
+                        <i class="bi bi-emoji-frown display-4 text-muted mb-3"></i>
+                        <h3>No airdrops found</h3>
+                        <p class="text-muted">Try adjusting your filters or check back later</p>
+                        <button class="btn btn-primary mt-2" id="resetFilters">
+                            Reset Filters
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pagination -->
+        <div class="row mt-4 d-none" id="paginationContainer">
+            <div class="col-12">
+                <nav aria-label="Airdrop pagination">
+                    <ul class="pagination justify-content-center">
+                        <li class="page-item disabled" id="prevPage">
+                            <a class="page-link" href="#" tabindex="-1">Previous</a>
+                        </li>
+                        <li class="page-item active"><a class="page-link" href="#">1</a></li>
+                        <li class="page-item"><a class="page-link" href="#">2</a></li>
+                        <li class="page-item"><a class="page-link" href="#">3</a></li>
+                        <li class="page-item" id="nextPage">
+                            <a class="page-link" href="#">Next</a>
+                        </li>
+                    </ul>
+                </nav>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="py-4 mt-5">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-6">
+                    <h5><i class="bi bi-coin"></i> Crypto Airdrop Tracker</h5>
+                    <p class="mb-0">Automatically updated list of legitimate cryptocurrency airdrops.</p>
+                </div>
+                <div class="col-md-3">
+                    <h5>Resources</h5>
+                    <ul class="list-unstyled">
+                        <li><a href="https://github.com/kali-linux-king/crypto-airdrop-hunter" class="text-white">GitHub</a></li>
+                        <li><a href="/api" class="text-white">API</a></li>
+                        <li><a href="/docs" class="text-white">Documentation</a></li>
+                    </ul>
+                </div>
+                <div class="col-md-3">
+                    <h5>About</h5>
+                    <ul class="list-unstyled">
+                        <li><a href="#" class="text-white">How It Works</a></li>
+                        <li><a href="#" class="text-white">Submit Airdrop</a></li>
+                        <li><a href="#" class="text-white">Contact</a></li>
+                    </ul>
+                </div>
+            </div>
+            <hr class="my-4 bg-light">
+            <div class="row">
+                <div class="col-12 text-center">
+                    <p class="mb-0 small">© <span id="currentYear"></span> Crypto Airdrop Tracker. All data is provided as-is without warranty.</p>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- WebSocket Connection Indicator -->
+    <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 11">
+        <div id="connectionToast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="toast-header">
+                <strong class="me-auto">Connection</strong>
+                <small>Just now</small>
+                <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+            <div class="toast-body">
+                Connected to real-time updates
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Current year for footer
+        document.getElementById('currentYear').textContent = new Date().getFullYear();
+
+        // App state
+        const state = {
+            airdrops: [],
+            filteredAirdrops: [],
+            currentPage: 1,
+            itemsPerPage: 12,
+            sources: new Set(),
+            socket: null,
+            lastUpdate: null
+        };
+
+        // DOM elements
+        const elements = {
+            container: document.getElementById('airdropContainer'),
+            loading: document.getElementById('loadingIndicator'),
+            emptyState: document.getElementById('emptyState'),
+            lastUpdated: document.getElementById('lastUpdated'),
+            refreshBtn: document.getElementById('refreshBtn'),
+            searchInput: document.getElementById('searchInput'),
+            searchBtn: document.getElementById('searchBtn'),
+            sourceFilter: document.getElementById('sourceFilter'),
+            sortSelect: document.getElementById('sortSelect'),
+            resetFilters: document.getElementById('resetFilters'),
+            pagination: document.getElementById('paginationContainer'),
+            totalCount: document.getElementById('totalCount'),
+            activeCount: document.getElementById('activeCount'),
+            newCount: document.getElementById('newCount'),
+            expiringCount: document.getElementById('expiringCount'),
+            connectionToast: new bootstrap.Toast(document.getElementById('connectionToast'))
+        };
+
+        // Initialize WebSocket
+        function initWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws/updates`;
+            
+            state.socket = new WebSocket(wsUrl);
+            
+            state.socket.onopen = () => {
+                console.log('WebSocket connected');
+                elements.connectionToast.show();
+            };
+            
+            state.socket.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                console.log('Update received:', data);
+                
+                if (data.event === 'update') {
+                    // Show update notification
+                    const toast = new bootstrap.Toast(document.createElement('div'));
+                    toast._element.classList.add('toast');
+                    toast._element.innerHTML = `
+                        <div class="toast-header">
+                            <strong class="me-auto">New Update</strong>
+                            <small>Just now</small>
+                            <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+                        </div>
+                        <div class="toast-body">
+                            ${data.count} airdrops available. <a href="#" onclick="location.reload()">Refresh</a>
+                        </div>
+                    `;
+                    document.body.appendChild(toast._element);
+                    toast.show();
+                    
+                    // Auto-remove toast after delay
+                    setTimeout(() => {
+                        toast._element.remove();
+                    }, 5000);
+                }
+            };
+            
+            state.socket.onclose = () => {
+                console.log('WebSocket disconnected');
+                setTimeout(initWebSocket, 5000); // Reconnect after 5 seconds
+            };
+        }
+
+        // Format date
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleString(undefined, {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        // Check if airdrop is new (within 24 hours)
+        function isNewAirdrop(scrapedAt) {
+            const now = new Date();
+            const scrapedDate = new Date(scrapedAt);
+            const diffHours = (now - scrapedDate) / (1000 * 60 * 60);
+            return diffHours < 24;
+        }
+
+        // Check if airdrop is expiring soon
+        function isExpiringSoon(endDate) {
+            if (!endDate) return false;
+            
+            const now = new Date();
+            const end = new Date(endDate);
+            const diffHours = (end - now) / (1000 * 60 * 60);
+            return diffHours > 0 && diffHours < 48;
+        }
+
+        // Render airdrop cards
+        function renderAirdrops(airdrops = state.filteredAirdrops) {
+            if (airdrops.length === 0) {
+                elements.emptyState.classList.remove('d-none');
+                elements.container.innerHTML = '';
+                return;
+            }
+            
+            elements.emptyState.classList.add('d-none');
+            
+            let html = '';
+            const startIdx = (state.currentPage - 1) * state.itemsPerPage;
+            const endIdx = startIdx + state.itemsPerPage;
+            const paginatedAirdrops = airdrops.slice(startIdx, endIdx);
+            
+            paginatedAirdrops.forEach(airdrop => {
+                const isNew = isNewAirdrop(airdrop.scraped_at);
+                const isExpiring = isExpiringSoon(airdrop.metadata?.end_date);
+                
+                html += `
+                    <div class="col-md-6 col-lg-4 mb-4">
+                        <div class="card airdrop-card h-100">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <h5 class="card-title mb-0">${airdrop.name}</h5>
+                                    <div>
+                                        ${isNew ? '<span class="badge badge-new text-white me-1">New</span>' : ''}
+                                        ${isExpiring ? '<span class="badge badge-expiring text-white">Expiring</span>' : ''}
+                                    </div>
+                                </div>
+                                
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <span class="badge source-badge">${airdrop.source}</span>
+                                    <small class="text-muted">${formatDate(airdrop.scraped_at)}</small>
+                                </div>
+                                
+                                ${airdrop.metadata?.value ? `
+                                    <div class="mb-3">
+                                        <span class="fw-bold">Value:</span> 
+                                        <span class="ms-2">${airdrop.metadata.value}</span>
+                                    </div>
+                                ` : ''}
+                                
+                                ${airdrop.metadata?.end_date ? `
+                                    <div class="mb-3">
+                                        <span class="fw-bold">Ends:</span> 
+                                        <span class="ms-2">${airdrop.metadata.end_date}</span>
+                                    </div>
+                                ` : ''}
+                                
+                                <div class="d-grid">
+                                    <a href="${airdrop.link}" 
+                                       target="_blank" 
+                                       rel="noopener noreferrer"
+                                       class="btn btn-primary">
+                                        <i class="bi bi-box-arrow-up-right me-2"></i>Claim Airdrop
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            elements.container.innerHTML = html;
+            updatePagination(airdrops.length);
+        }
+
+        // Update pagination
+        function updatePagination(totalItems) {
+            const totalPages = Math.ceil(totalItems / state.itemsPerPage);
+            
+            if (totalPages <= 1) {
+                elements.pagination.classList.add('d-none');
+                return;
+            }
+            
+            elements.pagination.classList.remove('d-none');
+            
+            // Update pagination controls
+            const prevBtn = document.getElementById('prevPage');
+            const nextBtn = document.getElementById('nextPage');
+            
+            prevBtn.classList.toggle('disabled', state.currentPage === 1);
+            nextBtn.classList.toggle('disabled', state.currentPage === totalPages);
+            
+            // TODO: Implement dynamic page numbers
+        }
+
+        // Filter airdrops
+        function filterAirdrops() {
+            const searchTerm = elements.searchInput.value.toLowerCase();
+            const sourceFilter = elements.sourceFilter.value;
+            const sortOption = elements.sortSelect.value;
+            
+            state.filteredAirdrops = state.airdrops.filter(airdrop => {
+                const matchesSearch = airdrop.name.toLowerCase().includes(searchTerm) || 
+                                    airdrop.source.toLowerCase().includes(searchTerm);
+                const matchesSource = !sourceFilter || airdrop.source === sourceFilter;
+                return matchesSearch && matchesSource;
+            });
+            
+            // Apply sorting
+            switch (sortOption) {
+                case 'newest':
+                    state.filteredAirdrops.sort((a, b) => 
+                        new Date(b.scraped_at) - new Date(a.scraped_at));
+                    break;
+                case 'oldest':
+                    state.filteredAirdrops.sort((a, b) => 
+                        new Date(a.scraped_at) - new Date(b.scraped_at));
+                    break;
+                case 'name':
+                    state.filteredAirdrops.sort((a, b) => 
+                        a.name.localeCompare(b.name));
+                    break;
+                case 'name-desc':
+                    state.filteredAirdrops.sort((a, b) => 
+                        b.name.localeCompare(a.name));
+                    break;
+            }
+            
+            // Update stats
+            updateStats();
+            
+            // Reset to first page
+            state.currentPage = 1;
+            
+            // Render results
+            renderAirdrops();
+        }
+
+        // Update statistics
+        function updateStats() {
+            const now = new Date();
+            
+            elements.totalCount.textContent = state.filteredAirdrops.length;
+            
+            elements.activeCount.textContent = state.filteredAirdrops
+                .filter(a => !a.metadata?.end_date || new Date(a.metadata.end_date) > now)
+                .length;
+                
+            elements.newCount.textContent = state.filteredAirdrops
+                .filter(a => isNewAirdrop(a.scraped_at))
+                .length;
+                
+            elements.expiringCount.textContent = state.filteredAirdrops
+                .filter(a => isExpiringSoon(a.metadata?.end_date))
+                .length;
+        }
+
+        // Load airdrops data
+        async function loadAirdrops() {
+            try {
+                elements.loading.classList.remove('d-none');
+                elements.container.innerHTML = '';
+                
+                const response = await fetch('/assets/data.json');
+                if (!response.ok) throw new Error('Network response was not ok');
+                
+                const data = await response.json();
+                state.airdrops = data.airdrops || [];
+                state.lastUpdate = data.last_updated;
+                
+                // Extract unique sources
+                state.sources = new Set(state.airdrops.map(a => a.source));
+                
+                // Populate source filter
+                elements.sourceFilter.innerHTML = `
+                    <option value="">All Sources</option>
+                    ${Array.from(state.sources).map(source => `
+                        <option value="${source}">${source.charAt(0).toUpperCase() + source.slice(1)}</option>
+                    `).join('')}
+                `;
+                
+                // Initial filter and render
+                filterAirdrops();
+                
+                // Update last updated time
+                if (state.lastUpdate) {
+                    elements.lastUpdated.textContent = `Updated: ${formatDate(state.lastUpdate)}`;
+                }
+                
+            } catch (error) {
+                console.error('Error loading airdrops:', error);
+                elements.container.innerHTML = `
+                    <div class="col-12">
+                        <div class="alert alert-danger">
+                            Failed to load airdrops. Please try again later.
+                        </div>
+                    </div>
+                `;
+            } finally {
+                elements.loading.classList.add('d-none');
+            }
+        }
+
+        // Event listeners
+        elements.searchBtn.addEventListener('click', filterAirdrops);
+        elements.searchInput.addEventListener('keyup', (e) => {
+            if (e.key === 'Enter') filterAirdrops();
+        });
+        elements.sourceFilter.addEventListener('change', filterAirdrops);
+        elements.sortSelect.addEventListener('change', filterAirdrops);
+        elements.refreshBtn.addEventListener('click', loadAirdrops);
+        elements.resetFilters.addEventListener('click', () => {
+            elements.searchInput.value = '';
+            elements.sourceFilter.value = '';
+            elements.sortSelect.value = 'newest';
+            filterAirdrops();
+        });
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadAirdrops();
+            initWebSocket();
+            
+            // Register Service Worker for PWA
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(registration => {
+                        console.log('ServiceWorker registration successful');
+                    })
+                    .catch(err => {
+                        console.log('ServiceWorker registration failed: ', err);
+                    });
+            }
+        });
+
+        // Pagination event delegation
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('page-link')) {
+                e.preventDefault();
+                
+                if (e.target.parentElement.id === 'prevPage') {
+                    if (state.currentPage > 1) {
+                        state.currentPage--;
+                        renderAirdrops();
+                    }
+                } else if (e.target.parentElement.id === 'nextPage') {
+                    const totalPages = Math.ceil(state.filteredAirdrops.length / state.itemsPerPage);
+                    if (state.currentPage < totalPages) {
+                        state.currentPage++;
+                        renderAirdrops();
+                    }
+                } else if (e.target.textContent.match(/^\d+$/)) {
+                    state.currentPage = parseInt(e.target.textContent);
+                    renderAirdrops();
+                }
+            }
+        });
+    </script>
+
+    <!-- Service Worker (sw.js would be separate file) -->
+    <script>
+        // This would normally be in a separate sw.js file
+        const CACHE_NAME = 'airdrop-tracker-v1';
+        const urlsToCache = [
+            '/',
+            '/index.html',
+            '/assets/data.json',
+            'https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css',
+            'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css'
+        ];
+
+        self.addEventListener('install', event => {
+            event.waitUntil(
+                caches.open(CACHE_NAME)
+                    .then(cache => cache.addAll(urlsToCache))
+            );
+        });
+
+        self.addEventListener('fetch', event => {
+            event.respondWith(
+                caches.match(event.request)
+                    .then(response => response || fetch(event.request))
+            );
+        });
+    </script>
+</body>
+</html>
