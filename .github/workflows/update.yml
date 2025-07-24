@@ -26,7 +26,7 @@ jobs:
       - uses: actions/checkout@v4
       
       - name: Set up Python ${{ env.PYTHON_VERSION }}
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
@@ -40,32 +40,42 @@ jobs:
       - name: Run source validation
         id: validation
         run: |
-          python scripts/validation.py test
-          echo "valid=$?" >> $GITHUB_OUTPUT
+          if python scripts/validation.py test; then
+            echo "valid=true" >> $GITHUB_OUTPUT
+          else
+            echo "valid=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
 
   scrape-data:
     name: Scrape & Process Data
     needs: validate-sources
-    if: ${{ needs.validate-sources.outputs.sources_valid == '0' }}
+    if: ${{ needs.validate-sources.outputs.sources_valid == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     
     strategy:
       matrix:
         retry: [1, 2, 3]
-        max-parallel: 1
+      max-parallel: 1
       fail-fast: false
 
     steps:
       - uses: actions/checkout@v4
       
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
           
       - name: Cache scraped data
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             sources.json
@@ -84,7 +94,7 @@ jobs:
           fi
           
       - name: Archive raw data
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: raw-scraped-data-${{ github.run_id }}
           path: sources.json
@@ -95,24 +105,47 @@ jobs:
     needs: scrape-data
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    outputs:
+      count: ${{ steps.process.outputs.count }}
     
     steps:
       - uses: actions/checkout@v4
         
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          sudo apt-get update && sudo apt-get install -y jq
+          
       - name: Download scraped data
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: raw-scraped-data-${{ github.run_id }}
           
       - name: Process data
+        id: process
         run: |
           python scripts/database.py --prune --limit ${{ env.MAX_AIRDROPS }}
+          count=$(jq '.airdrops | length' ${{ env.DATABASE_PATH }} 2>/dev/null || echo "0")
+          echo "count=$count" >> $GITHUB_OUTPUT
           
       - name: Verify database
         run: |
-          if [ $(jq '.airdrops | length' ${{ env.DATABASE_PATH }}) -eq 0 ]; then
-            echo "Error: Empty database"
+          if [ ! -f "${{ env.DATABASE_PATH }}" ]; then
+            echo "Error: Database file not found"
             exit 1
+          fi
+          count=$(jq '.airdrops | length' ${{ env.DATABASE_PATH }} 2>/dev/null || echo "0")
+          if [ "$count" -eq 0 ]; then
+            echo "Warning: Empty database, but continuing"
+          else
+            echo "Database contains $count airdrops"
           fi
 
   deploy:
@@ -131,14 +164,29 @@ jobs:
           git config --global pull.rebase true
           
       - name: Pull latest changes
-        run: git pull
+        run: |
+          git fetch origin
+          git reset --hard origin/main
         
       - name: Commit updates
         run: |
-          git add sources.json ${{ env.DATABASE_PATH }} docs/assets/data.json
-          git diff --quiet && git diff --staged --quiet || \
-            (git commit -m "Automated update: $(date +'%Y-%m-%d %H:%M UTC') [skip ci]" && \
-             git push origin main)
+          # Only add files that exist
+          files_to_add=""
+          [ -f "sources.json" ] && files_to_add="$files_to_add sources.json"
+          [ -f "${{ env.DATABASE_PATH }}" ] && files_to_add="$files_to_add ${{ env.DATABASE_PATH }}"
+          [ -f "docs/assets/data.json" ] && files_to_add="$files_to_add docs/assets/data.json"
+          
+          if [ -n "$files_to_add" ]; then
+            git add $files_to_add
+            if ! git diff --quiet --staged; then
+              git commit -m "Automated update: $(date +'%Y-%m-%d %H:%M UTC') [skip ci]"
+              git push origin main
+            else
+              echo "No changes to commit"
+            fi
+          else
+            echo "No files to commit"
+          fi
              
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
@@ -170,7 +218,7 @@ jobs:
         if: failure()
         uses: rtCamp/action-slack-notify@v2
         env:
-          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }} # Ensure this secret is set in your repository settings
           SLACK_COLOR: danger
           SLACK_TITLE: "🛑 Airdrop Update Failed"
           SLACK_MESSAGE: "Workflow ${{ github.workflow }} failed on ${{ github.ref }}"
@@ -179,7 +227,7 @@ jobs:
         if: success()
         uses: rtCamp/action-slack-notify@v2
         env:
-          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }} # Ensure this secret is set in your repository settings
           SLACK_COLOR: good
           SLACK_TITLE: "✅ Airdrop Update Complete"
           SLACK_MESSAGE: "Successfully updated ${{ needs.update-database.outputs.count }} airdrops"
