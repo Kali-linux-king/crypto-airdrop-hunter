@@ -1,2 +1,6 @@
-# crypto-airdrop-hunter
-Real-time tracking of legitimate crypto airdrops with claim guides. Automatically updated daily.
+# Crypto Airdrop Hunter
+
+Automated airdrop discovery and tracking system.
+
+## Test Update
+- Added Slack notifications for workflow status updates
