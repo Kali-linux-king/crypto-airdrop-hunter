@@ -40,7 +40,10 @@ jobs:
       - name: Run source validation
         id: validation
         run: |
-          if python scripts/validation.py test; then
+          # Create a test airdrop for validation
+          echo '{"data": [{"name": "Test Airdrop", "link": "https://example.com", "source": "test", "scraped_at": "2025-01-26"}]}' > test_sources.json
+          
+          if python scripts/validation.py --input test_sources.json --output test_validated.json; then
             echo "valid=true" >> $GITHUB_OUTPUT
           else
             echo "valid=false" >> $GITHUB_OUTPUT
